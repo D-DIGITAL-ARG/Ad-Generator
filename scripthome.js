@@ -1,7 +1,7 @@
 // --- CONFIGURATION & API KEYS ---
-const POLLINATIONS_TEXT_KEY = 'sk_2Z4CT1Tk202rvhy3plHCekfCb1iYEn7W';
-const POLLINATIONS_IMAGE_KEY = 'sk_niuwukmqzen4hv0DItZ97nPj1AiWJpX5';
-const POLLINATIONS_KLEIN_KEY = 'sk_uUkhL7cTzzuLt8vlejeJPXXU7hLc1zRz';
+const POLLINATIONS_TEXT_KEY = 'sk_WuXoH4sQLvdflCtxqV7wmMoOAnbCSefH';
+const POLLINATIONS_IMAGE_KEY = 'sk_AgWtajLDsqOl3bF6Wu7lae6AhB87KQkM';
+const POLLINATIONS_KLEIN_KEY = 'sk_FCdjKYELAgTPjP9YxWC0NeND8Fe67t7B';
 
 // Utility: API Client (Pure Frontend version)
 const api = {
@@ -232,6 +232,98 @@ const api = {
         }
     },
 
+    /**
+     * Helper to fetch an image and convert to DataURL to "clean" CORS for Canvas.
+     */
+    async getImageAsDataUrl(url) {
+        if (!url) return null;
+
+        const proxies = [
+            (u) => u, // Direct
+            (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+            (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+            (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+        ];
+
+        for (const proxyFn of proxies) {
+            try {
+                const targetUrl = proxyFn(url);
+                const resp = await fetch(targetUrl);
+                if (!resp.ok) continue;
+
+                let blob;
+                if (targetUrl.includes('allorigins')) {
+                    const json = await resp.json();
+                    const blobResp = await fetch(json.contents);
+                    blob = await blobResp.blob();
+                } else {
+                    blob = await resp.blob();
+                }
+
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+            } catch (e) {
+                console.warn(`Fetch with proxy failed:`, e);
+            }
+        }
+        return null;
+    },
+
+    async composeAdImage(backgroundUrl, overlayUrl) {
+        const bgData = await this.getImageAsDataUrl(backgroundUrl);
+        const overlayData = overlayUrl ? await this.getImageAsDataUrl(overlayUrl) : null;
+
+        if (!bgData) throw new Error("Could not load background image");
+
+        return new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1080;
+            canvas.height = 1080;
+            const ctx = canvas.getContext('2d');
+
+            const bgImg = new Image();
+            bgImg.onload = () => {
+                ctx.drawImage(bgImg, 0, 0, 1080, 1080);
+
+                if (overlayData) {
+                    const overlayImg = new Image();
+                    overlayImg.onload = () => {
+                        // Logic: Maintain aspect ratio (object-contain)
+                        const targetSize = 1080 * 0.6;
+                        let drawWidth, drawHeight;
+                        const imgRatio = overlayImg.width / overlayImg.height;
+
+                        if (imgRatio > 1) { // Landscape
+                            drawWidth = targetSize;
+                            drawHeight = targetSize / imgRatio;
+                        } else { // Portrait or Square
+                            drawHeight = targetSize;
+                            drawWidth = targetSize * imgRatio;
+                        }
+
+                        const x = (1080 - drawWidth) / 2;
+                        const y = (1080 - drawHeight) / 2;
+
+                        ctx.drawImage(overlayImg, x, y, drawWidth, drawHeight);
+                        resolve(canvas.toDataURL('image/jpeg', 0.95));
+                    };
+                    overlayImg.onerror = () => {
+                        console.warn("Failed to load overlay DataUrl");
+                        resolve(canvas.toDataURL('image/jpeg', 0.95));
+                    };
+                    overlayImg.src = overlayData;
+                } else {
+                    resolve(canvas.toDataURL('image/jpeg', 0.95));
+                }
+            };
+            bgImg.onerror = () => reject(new Error("Failed to load background DataUrl"));
+            bgImg.src = bgData;
+        });
+    },
+
     safeJsonParse(text) {
         let content = text;
         try {
@@ -278,14 +370,21 @@ const resetBtn = document.getElementById('reset-btn');
 function setStage(newStage) {
     stage = newStage;
     Object.values(stages).forEach(s => {
-        if (s) s.classList.remove('active');
+        if (s) {
+            s.classList.remove('active');
+            s.classList.add('hidden');
+        }
     });
-    if (stages[newStage]) stages[newStage].classList.add('active');
+    if (stages[newStage]) {
+        stages[newStage].classList.add('active');
+        stages[newStage].classList.remove('hidden');
+    }
     window.scrollTo(0, 0);
 }
 
+
 function updateProgress(step, total = 4) {
-    const percentage = Math.round(((step + 1) / total) * 100);
+    const percentage = Math.round((step / total) * 100);
     if (progressBar) progressBar.style.width = `${percentage}%`;
     if (progressIndicator) progressIndicator.style.width = `${percentage}%`;
     if (progressPercentage) progressPercentage.textContent = `${percentage}%`;
@@ -471,45 +570,49 @@ async function startGeneration() {
             imagePrompt: ad.image_prompt
         }));
 
-        renderAds();
-        setStage('results');
-
-        for (let i = 0; i < adCopy.ads.length; i++) {
-            const ad = adCopy.ads[i];
+        // Create a list of promises for image generation
+        const generationPromises = currentAds.map(async (ad, i) => {
             let options = { width: 1080, height: 1080, seed: Math.floor(Math.random() * 1000000) };
-            let promptToUse = ad.image_prompt;
+            let promptToUse = ad.imagePrompt;
 
             if (i === 0 && selectedImage) {
                 console.log('🎨 Variant 0: Klein background + product overlay');
                 options.model = 'klein';
                 options.image = selectedImage;
                 promptToUse = `Abstract artistic background. Derive the color palette and mood from the reference image. Use the same dominant colors. Smooth gradients, elegant textures. NO OBJECTS. NO PEOPLE. NO TEXT. NO LOGOS. CLEAN BACKGROUND ONLY. 1:1 format.`;
-                currentAds[i].visualConcept = 'Fondo premium + imagen del producto';
-                currentAds[i].productOverlay = selectedImage;
-                renderAds();
+                ad.visualConcept = 'Fondo premium + imagen del producto';
+                ad.productOverlay = selectedImage;
                 try {
                     const result = await api.generateImage(promptToUse, options);
-                    currentAds[i].imageUrl = result.url;
-                    renderAds();
+                    ad.imageUrl = result.url;
                 } catch (e) {
                     console.error('Error generating Klein background', e);
-                    currentAds[i].imageUrl = selectedImage;
-                    currentAds[i].productOverlay = null;
-                    renderAds();
+                    ad.imageUrl = selectedImage;
+                    ad.productOverlay = null;
                 }
             } else {
                 options.model = 'flux';
-                promptToUse = `${ad.image_prompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
+                promptToUse = `${ad.imagePrompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
                 try {
                     const result = await api.generateImage(promptToUse, options);
-                    currentAds[i].imageUrl = result.url;
-                    renderAds();
+                    ad.imageUrl = result.url;
                 } catch (e) {
-                    currentAds[i].imageUrl = 'error';
-                    renderAds();
+                    ad.imageUrl = 'error';
                 }
             }
-        }
+        });
+
+        // Wait for ALL images to finish generating
+        await Promise.all(generationPromises);
+
+        // Final progress update
+        updateProgress(4);
+
+        // Brief delay for the user to see the "Completed" state
+        await new Promise(r => setTimeout(r, 800));
+
+        renderAds();
+        setStage('results');
     } catch (error) {
         console.error(error);
         setStage('results');
@@ -535,45 +638,45 @@ if (generateMoreBtn) {
                 imagePrompt: ad.image_prompt
             }));
 
-            currentAds = [...currentAds, ...newAdsBase];
-            renderAds();
-            setStage('results');
-
-            for (let i = 0; i < adCopy.ads.length; i++) {
-                const adIndex = currentCount + i;
-                const ad = adCopy.ads[i];
+            // Generate images for new ads
+            const newGenerationPromises = newAdsBase.map(async (ad, i) => {
                 let options = { width: 1080, height: 1080, seed: Math.floor(Math.random() * 1000000) };
-                let promptToUse = ad.image_prompt;
+                let promptToUse = ad.imagePrompt;
 
-                if (i === 0 && selectedImage) {
+                if (i === 0 && selectedImage) { // For the first of the new batch too? Or just global?
                     options.model = 'klein';
                     options.image = selectedImage;
                     promptToUse = `Abstract artistic background. Derive the color palette and mood from the reference image. Use the same dominant colors. Smooth gradients, elegant textures. NO OBJECTS. NO PEOPLE. NO TEXT. NO LOGOS. CLEAN BACKGROUND ONLY. 1:1 format.`;
-                    currentAds[adIndex].visualConcept = 'Fondo premium + imagen del producto';
-                    currentAds[adIndex].productOverlay = selectedImage;
-                    renderAds();
+                    ad.visualConcept = 'Fondo premium + imagen del producto';
+                    ad.productOverlay = selectedImage;
                     try {
                         const result = await api.generateImage(promptToUse, options);
-                        currentAds[adIndex].imageUrl = result.url;
-                        renderAds();
+                        ad.imageUrl = result.url;
                     } catch (e) {
-                        currentAds[adIndex].imageUrl = selectedImage;
-                        currentAds[adIndex].productOverlay = null;
-                        renderAds();
+                        ad.imageUrl = selectedImage;
+                        ad.productOverlay = null;
                     }
                 } else {
                     options.model = 'flux';
-                    promptToUse = `${ad.image_prompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
+                    promptToUse = `${ad.imagePrompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
                     try {
                         const result = await api.generateImage(promptToUse, options);
-                        currentAds[adIndex].imageUrl = result.url;
-                        renderAds();
+                        ad.imageUrl = result.url;
                     } catch (e) {
-                        currentAds[adIndex].imageUrl = 'error';
-                        renderAds();
+                        ad.imageUrl = 'error';
                     }
                 }
-            }
+            });
+
+            await Promise.all(newGenerationPromises);
+
+            currentAds = [...currentAds, ...newAdsBase];
+
+            updateProgress(4);
+            await new Promise(r => setTimeout(r, 800));
+
+            renderAds();
+            setStage('results');
         } catch (error) {
             setStage('results');
         }
@@ -623,12 +726,32 @@ function renderAds() {
             alert('Texto copiado');
         });
 
-        clone.querySelector('.download-btn').addEventListener('click', () => {
+        clone.querySelector('.download-btn').addEventListener('click', async (e) => {
             if (!ad.imageUrl || ad.imageUrl === 'error') return;
-            const link = document.createElement('a');
-            link.href = ad.imageUrl;
-            link.download = `ad-${Date.now()}.jpg`;
-            link.click();
+
+            const btn = e.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span><span>Procesando...</span>';
+            btn.disabled = true;
+
+            try {
+                let finalUrl = ad.imageUrl;
+                if (ad.productOverlay) {
+                    try {
+                        finalUrl = await api.composeAdImage(ad.imageUrl, ad.productOverlay);
+                    } catch (err) {
+                        console.error("Composite failed, using background only", err);
+                    }
+                }
+
+                const link = document.createElement('a');
+                link.href = finalUrl;
+                link.download = `ad-${Date.now()}.jpg`;
+                link.click();
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         });
 
         adsGallery.appendChild(clone);
