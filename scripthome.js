@@ -723,7 +723,11 @@ function renderAds() {
 
         clone.querySelector('.copy-btn').addEventListener('click', () => {
             navigator.clipboard.writeText(`${ad.headline}\n\n${ad.caption}`);
-            alert('Texto copiado');
+            const toast = document.getElementById("toast");
+            toast.classList.add("show");
+            setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
         });
 
         clone.querySelector('.download-btn').addEventListener('click', async (e) => {
@@ -757,4 +761,5 @@ function renderAds() {
         adsGallery.appendChild(clone);
     });
 }
+
 
