@@ -104,15 +104,10 @@
             background: linear-gradient(0deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 50%);
         }
 
-        /* Custom stage handling */
-        .stage {
-            display: none;
-        }
-
         .stage.active {
-            display: block;
             animation: fadeIn 0.5s ease-out;
         }
+
 
         @keyframes fadeIn {
             from {
@@ -241,7 +236,8 @@
         </section>
 
         <!-- STAGE: GENERATING -->
-        <section id="stage-generating" class="stage w-full flex flex-col items-center">
+        <section id="stage-generating" class="stage w-full flex flex-col items-center hidden">
+
             <div class="max-w-2xl w-full text-center mb-10">
                 <h1 class="text-4xl md:text-5xl font-bold mb-4 tracking-tight">Estamos preparando tus anuncios</h1>
             </div>
@@ -275,7 +271,8 @@
                     <div class="step-item flex items-center gap-5" data-step="0">
                         <div
                             class="step-icon-status flex-shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                            <span class="material-symbols-outlined text-xl">search</span></div>
+                            <span class="material-symbols-outlined text-xl">search</span>
+                        </div>
                         <div class="flex-grow">
                             <p class="font-medium text-slate-300">Analizando contenido del sitio</p>
                             <p class="step-state text-xs uppercase font-semibold tracking-wider text-gray-500">
@@ -286,7 +283,8 @@
                     <div class="step-item flex items-center gap-5" data-step="1">
                         <div
                             class="step-icon-status flex-shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                            <span class="material-symbols-outlined text-xl">psychology</span></div>
+                            <span class="material-symbols-outlined text-xl">psychology</span>
+                        </div>
                         <div class="flex-grow">
                             <p class="font-medium text-slate-300">Estrategia de Marca</p>
                             <p class="step-state text-xs uppercase font-semibold tracking-wider text-gray-500">
@@ -297,7 +295,8 @@
                     <div class="step-item flex items-center gap-5" data-step="2">
                         <div
                             class="step-icon-status flex-shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                            <span class="material-symbols-outlined text-xl">edit_note</span></div>
+                            <span class="material-symbols-outlined text-xl">edit_note</span>
+                        </div>
                         <div class="flex-grow">
                             <p class="font-medium text-slate-300">Copywriting Persuasivo</p>
                             <p class="step-state text-xs uppercase font-semibold tracking-wider text-gray-500">
@@ -308,7 +307,8 @@
                     <div class="step-item flex items-center gap-5" data-step="3">
                         <div
                             class="step-icon-status flex-shrink-0 w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center">
-                            <span class="material-symbols-outlined text-xl">palette</span></div>
+                            <span class="material-symbols-outlined text-xl">palette</span>
+                        </div>
                         <div class="flex-grow">
                             <p class="font-medium text-slate-300">Visual Studio</p>
                             <p class="step-state text-xs uppercase font-semibold tracking-wider text-gray-500">
@@ -324,7 +324,8 @@
         </section>
 
         <!-- STAGE: RESULTS -->
-        <section id="stage-results" class="stage w-full">
+        <section id="stage-results" class="stage w-full hidden">
+
             <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
                 <div>
                     <h2 class="text-sm font-bold text-neon-pink uppercase tracking-widest mb-2">Resultados de generación
