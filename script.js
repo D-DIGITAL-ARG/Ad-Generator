@@ -5,9 +5,8 @@ const POLLINATIONS_KLEIN_KEY = 'sk_FCdjKYELAgTPjP9YxWC0NeND8Fe67t7B';
 
 // Utility: API Client (Pure Frontend version)
 const api = {
-    // Persistent memory for the working proxy
     get workingProxyIndex() {
-        return parseInt(localStorage.getItem('ads_creator_proxy_idx')) || 0;
+    return parseInt(localStorage.getItem('ads_creator_proxy_idx')) || 0;
     },
     set workingProxyIndex(val) {
         localStorage.setItem('ads_creator_proxy_idx', val);
@@ -17,9 +16,8 @@ const api = {
      * Scrapes website content using a CORS proxy and browser-side parsing.
      */
     async analyze(url) {
-        console.log(`🔍 Analyzing website (Standalone): ${url}`);
+        console.log(`Analyzing website (Standalone): ${url}`);
 
-        // Define proxies to try
         const proxyTemplates = [
             (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}&cachebust=${Date.now()}`,
             (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
@@ -78,6 +76,9 @@ const api = {
         // Extract metadata
         const title = doc.title || '';
         const description = doc.querySelector('meta[name="description"]')?.content || '';
+	console.log(`Obtiene MetaDatos del sitio`);
+
+
 
         // Advanced image extraction
         const getAbs = (s) => {
@@ -111,7 +112,7 @@ const api = {
             })
             .slice(0, 15);
 
-        console.log(`📸 Detected ${detectedImages.length} relevant images`);
+        console.log(`Detected ${detectedImages.length} relevant images`);
 
         // Use Pollinations to analyze the extracted text
         const systemPrompt = `Rol: Actúa como un analista experto en marketing digital, diseño estratégico y copywriting senior. Tu objetivo es realizar un web scraping y análisis profundo de la URL proporcionada para extraer insumos que permitan crear anuncios de alto impacto.
@@ -127,7 +128,7 @@ Tarea: Analiza el sitio web ${url} y devuelve un objeto JSON detallado en españ
 "titulares_principales": ["Lista de los encabezados más relevantes extraídos del sitio."],
 "propuesta_valor": "Define el beneficio central único que ofrece la marca.",
 "tono_voz": "Determina si es cercano, institucional, inspirador o técnico.",
-"metodo_beneficios": "Traduce 3 características técnicas en beneficios reales usando el método '¿Y qué?'.",
+"metodo_beneficios": "Traduce 3 características técnicas en beneficios reales usando el método ¿Y qué?.",
 "formulas_detectadas": "Identifica si usan estructuras como PAS (Problema, Agitación, Solución) u otras como AIDA."
 },
 "estrategia_audiencia": {
@@ -148,30 +149,30 @@ Precisión: No inventes datos; si una información no es detectable, indicá "no
 Claridad: El lenguaje debe ser profesional y directo, evitando redundancias.
 JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser procesado por mi aplicación sin errores de formato. Idioma: Toda la respuesta debe ser en español.`;
 
-	console.log(`1er carga de systemPrompt`);
+const userPrompt = `URL: ${url}\nTitle: ${title}\nDesc: ${description}\n`;
 
-        const userPrompt = `URL: ${url}\nTitle: ${title}\nDesc: ${description}\n`;
-	console.log(`1er carga de userPrompt`);
+console.log(`Arma systemPrompt de análisis`);
+console.log(`Arma userPrompt con metadatos del sitio`);
 
         try {
             const rawResult = await this.callText(systemPrompt, userPrompt);
             const json = this.safeJsonParse(rawResult);
-	console.log(`Entra al try de rawResult`);
+	console.log(`Obtiene respuesta de Gemini`);
             if (!json) throw new Error("JSON Parse Error");
             json.detected_images = detectedImages;
-	console.log(`1er carga de rawResult JSON`, json);
+	console.log(`Transforma respuesta a Json y retorna datos`);
             return json;
         } catch (e) {
             throw new Error(`Error en análisis de IA: ${e.message}`);
         }
-    },
+   },
 
     async callText(systemPrompt, userPrompt) {
-	console.log(`Entra al callText`);
+	console.log(`Obtiene textos de Prompts`);
         try {
-            const combined = `${systemPrompt}\n${userPrompt}`.replace(/\s+/g, ' ').trim().substring(0, 2500);
+        const combined = `${systemPrompt}\n${userPrompt}`.replace(/\s+/g, ' ').trim().substring(0, 2500);
             const encoded = encodeURIComponent(combined);
-	console.log(`1er carga de Combined`, encoded);
+	console.log(`Codifica los prompts a URI y envía fetch con Gemini`);
             const url = `https://gen.pollinations.ai/text/${encoded}?model=gemini-fast&json=true`;
             const response = await fetch(url, {
                 headers: {
@@ -187,6 +188,7 @@ JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser
             throw new Error(`Fallo en conexión con Pollinations Text: ${e.message}`);
         }
     },
+
     
        async generateCopy(websiteData, count = 3, exclude = []) {
         try {
@@ -211,17 +213,17 @@ JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser
                 }
             Evita conceptos ya usados: ${JSON.stringify(exclude)}.`;
 
-	console.log(`2da carga de systemPrompt`);
+	console.log(`Arma systemPrompt para crear Ads`);
 
             const userPrompt = `Datos de Marca: ${JSON.stringify(websiteData).substring(0, 1000)}. Tarea: Crea ${count} conceptos de anuncios NUEVOS en ESPAÑOL.`;
-	 console.log(`2da carga de userPrompt`);
+	 console.log(`Crea prompt (userPrompt) con datos visuales Ads`);
 
             const rawResult = await this.callText(systemPrompt, userPrompt);
             let json = this.safeJsonParse(rawResult);
-	 console.log(`2da carga de rawResult Json`, json);
+	 console.log(`Arma Json con prompt para ads y datos visuales`);
 
             if (json && Array.isArray(json)) json = { ads: json };
-	console.log(`1er carga de adsJson`);
+	console.log(`Crea Copys y retorna Json con datos`);
             return json;
         } catch (e) {
             throw new Error(`Fallo al generar copy publicitario: ${e.message}`);
@@ -242,11 +244,9 @@ JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser
                 apiKey = POLLINATIONS_KLEIN_KEY;
                 const encodedRef = encodeURIComponent(image);
                 url = `https://gen.pollinations.ai/image/${encodedPrompt}?model=klein&width=${width}&height=${height}&seed=${finalSeed}&nologo=true&image=${encodedRef}`;
-	console.log(`1er encodedPrompt Klein`);
 
             } else {
                 url = `https://gen.pollinations.ai/image/${encodedPrompt}?width=${width}&height=${height}&seed=${finalSeed}&nologo=true&model=flux`;
-	console.log(`1er encodedPrompt Flux`);
             }
 
             const response = await fetch(url, {
@@ -298,8 +298,6 @@ JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result);
                     reader.readAsDataURL(blob);
-	console.log(`1er Reader`, reader.onloadend);
-
                 });
             } catch (e) {
                 console.warn(`Fetch with proxy failed:`, e);
@@ -365,8 +363,6 @@ JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser
         try {
             const outer = JSON.parse(text);
             if (outer && outer.result) { content = outer.result;
-	console.log(`1er Json.parse`, outer);
-
           }  else if (outer && typeof outer === 'object') return outer;
         } catch (e) {  }
 
