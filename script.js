@@ -298,7 +298,7 @@ JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result);
                     reader.readAsDataURL(blob);
-	console.log(`1er Reader`, ${reader.onloadend)};
+	console.log(`1er Reader`, reader.onloadend);
 
                 });
             } catch (e) {
@@ -807,3 +807,4 @@ function renderAds() {
         adsGallery.appendChild(clone);
     });
 }
+
