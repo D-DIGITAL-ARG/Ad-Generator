@@ -78,7 +78,6 @@ const api = {
         // Extract metadata
         const title = doc.title || '';
         const description = doc.querySelector('meta[name="description"]')?.content || '';
-        const innerText = doc.body.innerText.replace(/\s+/g, ' ').substring(0, 15000);
 
         // Advanced image extraction
         const getAbs = (s) => {
@@ -115,24 +114,52 @@ const api = {
         console.log(`📸 Detected ${detectedImages.length} relevant images`);
 
         // Use Pollinations to analyze the extracted text
-        const systemPrompt = `Eres un experto en marketing digital. Analiza este sitio web y extrae un JSON detallado.
-            RESPONDE SIEMPRE EN ESPAÑOL. Identifica con precisión:
-            - Tipo de producto (ebook, curso, servicio, físico, etc.)
-            - Propuesta de valor única y diferencial
-            - Promesa principal de transformación
-            - Puntos de dolor del cliente ideal
-            - Beneficios emocionales y funcionales
-            - Tono de comunicación (inspiracional, autoritario, cercano, etc.)
-            - Paleta de colores dominante del sitio
-            - Estilo visual (minimalista, espiritual, profesional, vibrante, etc.)
-            Devuelve SOLO JSON válido, sin explicaciones extra.`;
-        const userPrompt = `URL: ${url}\nTitle: ${title}\nDesc: ${description}\n\nContenido del sitio:\n${innerText.substring(0, 2000)}\n\nDevuelve JSON en ESPAÑOL con estos campos exactos:\n{"brand_name": "...", "product_type": "...", "main_promise": "...", "pain_points": ["..."], "key_benefits": ["..."], "target_audience": "...", "brand_tone": "...", "emotional_tone": "...", "visual_style": "...", "color_palette": "...", "unique_offer": "...", "products_services": ["..."]}`;
+        const systemPrompt = `Rol: Actúa como un analista experto en marketing digital, diseño estratégico y copywriting senior. Tu objetivo es realizar un web scraping y análisis profundo de la URL proporcionada para extraer insumos que permitan crear anuncios de alto impacto.
+Tarea: Analiza el sitio web ${url} y devuelve un objeto JSON detallado en español con la siguiente estructura y contenido:
+{
+"analisis_visual": {
+"paleta_colores": "Identifica colores principales y secundarios (HEX si es posible).",
+"tipografia": "Describe el estilo (moderna, clásica, peso) y su jerarquía visual.",
+"estilo_imagenes": "Define si son minimalistas, técnicas, realistas, estilo acuarela, etc.",
+"atmosfera_diseno": "Describe la sensación general (lujo, calma, urgencia, profesionalismo)."
+},
+"analisis_copywriting": {
+"titulares_principales": ["Lista de los encabezados más relevantes extraídos del sitio."],
+"propuesta_valor": "Define el beneficio central único que ofrece la marca.",
+"tono_voz": "Determina si es cercano, institucional, inspirador o técnico.",
+"metodo_beneficios": "Traduce 3 características técnicas en beneficios reales usando el método '¿Y qué?'.",
+"formulas_detectadas": "Identifica si usan estructuras como PAS (Problema, Agitación, Solución) u otras como AIDA."
+},
+"estrategia_audiencia": {
+"buyer_persona_estimado": {
+"perfil": "Descripción semificticia del cliente ideal basada en el texto del sitio.",
+"puntos_dolor": ["Lista de problemas o frustraciones que el sitio busca resolver."],
+"metas_deseos": ["Qué aspira lograr el cliente con este producto/servicio."]
+},
+"etapa_embudo": "Identifica si el sitio está orientado a Conciencia (TOFU), Consideración (MOFU) o Conversión (BOFU)."
+},
+"insumos_para_anuncios": {
+"ganchos_sugeridos": ["Ideas de ganchos emocionales o racionales para anuncios de Meta Ads."],
+"angulos_de_venta": ["Propuestas de enfoques para el copy (ej. urgencia, exclusividad, ahorro de tiempo)."]
+}
+}
+Restricciones y Guías Adicionales:
+Precisión: No inventes datos; si una información no es detectable, indicá "no detectado".
+Claridad: El lenguaje debe ser profesional y directo, evitando redundancias.
+JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser procesado por mi aplicación sin errores de formato. Idioma: Toda la respuesta debe ser en español.`;
+
+	console.log(`1er carga de systemPrompt`);
+
+        const userPrompt = `URL: ${url}\nTitle: ${title}\nDesc: ${description}\n`;
+	console.log(`1er carga de userPrompt`);
 
         try {
             const rawResult = await this.callText(systemPrompt, userPrompt);
             const json = this.safeJsonParse(rawResult);
+	console.log(`Entra al try de rawResult`);
             if (!json) throw new Error("JSON Parse Error");
             json.detected_images = detectedImages;
+	console.log(`1er carga de rawResult JSON`, json);
             return json;
         } catch (e) {
             throw new Error(`Error en análisis de IA: ${e.message}`);
@@ -140,11 +167,12 @@ const api = {
     },
 
     async callText(systemPrompt, userPrompt) {
+	console.log(`Entra al callText`);
         try {
-            const combined = `${systemPrompt}\n${userPrompt}`.replace(/\s+/g, ' ').trim().substring(0, 1500);
+            const combined = `${systemPrompt}\n${userPrompt}`.replace(/\s+/g, ' ').trim().substring(0, 2500);
             const encoded = encodeURIComponent(combined);
+	console.log(`1er carga de Combined`, encoded);
             const url = `https://gen.pollinations.ai/text/${encoded}?model=gemini-fast&json=true`;
-
             const response = await fetch(url, {
                 headers: {
                     'Accept': '*/*',
@@ -159,8 +187,8 @@ const api = {
             throw new Error(`Fallo en conexión con Pollinations Text: ${e.message}`);
         }
     },
-
-    async generateCopy(websiteData, count = 3, exclude = []) {
+    
+       async generateCopy(websiteData, count = 3, exclude = []) {
         try {
             const hasRefImage = !!selectedImage;
             const systemPrompt = `Crea ${count} conceptos de anuncios creativos y PERSUASIVOS para redes sociales.
@@ -176,21 +204,24 @@ const api = {
                - Sin texto, sin letras, sin marcas de agua.
                - Inspirada en el estilo visual de la marca: ${JSON.stringify(websiteData?.visual_style || '')} y la promesa: "${websiteData?.main_promise || ''}"
                - Evitar fotos de stock genéricas. Prefiere: personas en acción de transformación, escenas de logro, luz simbólica, espacios minimalistas con energía.
-               - Formato 1:1, composición cinematográfica, iluminación premium.
-            
+               - Formato 1:1, composición cinematográfica, iluminación premium.            
             ${hasRefImage ?
                     '- Para el PRIMER anuncio (index 0), sólo devuelve image_prompt vacío o placeholder, el sistema usará la imagen del sitio.' :
                     '- Para TODOS los anuncios, crea image_prompts únicos y emocionalmente resonantes con la audiencia.'
                 }
             Evita conceptos ya usados: ${JSON.stringify(exclude)}.`;
 
+	console.log(`2da carga de systemPrompt`);
 
-            const userPrompt = `Datos de Marca: ${JSON.stringify(websiteData).substring(0, 800)}. Tarea: Crea ${count} conceptos de anuncios NUEVOS en ESPAÑOL.`;
+            const userPrompt = `Datos de Marca: ${JSON.stringify(websiteData).substring(0, 1000)}. Tarea: Crea ${count} conceptos de anuncios NUEVOS en ESPAÑOL.`;
+	 console.log(`2da carga de userPrompt`);
 
             const rawResult = await this.callText(systemPrompt, userPrompt);
             let json = this.safeJsonParse(rawResult);
+	 console.log(`2da carga de rawResult Json`, json);
 
             if (json && Array.isArray(json)) json = { ads: json };
+	console.log(`1er carga de adsJson`);
             return json;
         } catch (e) {
             throw new Error(`Fallo al generar copy publicitario: ${e.message}`);
@@ -211,8 +242,11 @@ const api = {
                 apiKey = POLLINATIONS_KLEIN_KEY;
                 const encodedRef = encodeURIComponent(image);
                 url = `https://gen.pollinations.ai/image/${encodedPrompt}?model=klein&width=${width}&height=${height}&seed=${finalSeed}&nologo=true&image=${encodedRef}`;
+	console.log(`1er encodedPrompt Klein`);
+
             } else {
                 url = `https://gen.pollinations.ai/image/${encodedPrompt}?width=${width}&height=${height}&seed=${finalSeed}&nologo=true&model=flux`;
+	console.log(`1er encodedPrompt Flux`);
             }
 
             const response = await fetch(url, {
@@ -264,6 +298,8 @@ const api = {
                     const reader = new FileReader();
                     reader.onloadend = () => resolve(reader.result);
                     reader.readAsDataURL(blob);
+	console.log(`1er Reader`, ${reader.onloadend)};
+
                 });
             } catch (e) {
                 console.warn(`Fetch with proxy failed:`, e);
@@ -328,9 +364,11 @@ const api = {
         let content = text;
         try {
             const outer = JSON.parse(text);
-            if (outer && outer.result) content = outer.result;
-            else if (outer && typeof outer === 'object') return outer;
-        } catch (e) { }
+            if (outer && outer.result) { content = outer.result;
+	console.log(`1er Json.parse`, outer);
+
+          }  else if (outer && typeof outer === 'object') return outer;
+        } catch (e) {  }
 
         const clean = content.replace(/```json|```/g, '').trim();
         const match = clean.match(/[\[\{][\s\S]*[\]\}]/);
@@ -539,6 +577,7 @@ if (submitManualBtn) {
 
             const rawResult = await api.callText(systemPrompt, userPrompt);
             websiteData = api.safeJsonParse(rawResult);
+	console.log(`1er websiteData`, websiteData);
 
             if (!websiteData) throw new Error("No se pudo analizar el texto manual");
 
@@ -569,17 +608,19 @@ async function startGeneration() {
             visualConcept: ad.visual_concept,
             imagePrompt: ad.image_prompt
         }));
+	console.log(`1er currentAds`);
 
         // Create a list of promises for image generation
         const generationPromises = currentAds.map(async (ad, i) => {
             let options = { width: 1080, height: 1080, seed: Math.floor(Math.random() * 1000000) };
             let promptToUse = ad.imagePrompt;
+	console.log(`1er imagePrompt`, promptToUse);
 
             if (i === 0 && selectedImage) {
-                console.log('🎨 Variant 0: Klein background + product overlay');
                 options.model = 'klein';
                 options.image = selectedImage;
                 promptToUse = `Abstract artistic background. Derive the color palette and mood from the reference image. Use the same dominant colors. Smooth gradients, elegant textures. NO OBJECTS. NO PEOPLE. NO TEXT. NO LOGOS. CLEAN BACKGROUND ONLY. 1:1 format.`;
+           console.log(`Prompt-Image klein`, promptToUse);
                 ad.visualConcept = 'Fondo premium + imagen del producto';
                 ad.productOverlay = selectedImage;
                 try {
@@ -593,6 +634,7 @@ async function startGeneration() {
             } else {
                 options.model = 'flux';
                 promptToUse = `${ad.imagePrompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
+           console.log(`1er Prompt-Image flux`, promptToUse);
                 try {
                     const result = await api.generateImage(promptToUse, options);
                     ad.imageUrl = result.url;
@@ -642,11 +684,14 @@ if (generateMoreBtn) {
             const newGenerationPromises = newAdsBase.map(async (ad, i) => {
                 let options = { width: 1080, height: 1080, seed: Math.floor(Math.random() * 1000000) };
                 let promptToUse = ad.imagePrompt;
+           console.log(`Prompt-Image for news`, promptToUse);
 
                 if (i === 0 && selectedImage) { // For the first of the new batch too? Or just global?
                     options.model = 'klein';
                     options.image = selectedImage;
                     promptToUse = `Abstract artistic background. Derive the color palette and mood from the reference image. Use the same dominant colors. Smooth gradients, elegant textures. NO OBJECTS. NO PEOPLE. NO TEXT. NO LOGOS. CLEAN BACKGROUND ONLY. 1:1 format.`;
+           console.log(`2do Prompt-Image klein`, promptToUse);
+
                     ad.visualConcept = 'Fondo premium + imagen del producto';
                     ad.productOverlay = selectedImage;
                     try {
@@ -659,6 +704,7 @@ if (generateMoreBtn) {
                 } else {
                     options.model = 'flux';
                     promptToUse = `${ad.imagePrompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
+           console.log(`2do Prompt-Image flux`, promptToUse);
                     try {
                         const result = await api.generateImage(promptToUse, options);
                         ad.imageUrl = result.url;
@@ -761,4 +807,3 @@ function renderAds() {
         adsGallery.appendChild(clone);
     });
 }
-
