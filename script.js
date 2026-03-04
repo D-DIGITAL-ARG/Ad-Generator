@@ -3,18 +3,7 @@ const POLLINATIONS_TEXT_KEY = 'sk_WuXoH4sQLvdflCtxqV7wmMoOAnbCSefH';
 const POLLINATIONS_IMAGE_KEY = 'sk_AgWtajLDsqOl3bF6Wu7lae6AhB87KQkM';
 const POLLINATIONS_KLEIN_KEY = 'sk_FCdjKYELAgTPjP9YxWC0NeND8Fe67t7B';
 
-// Utility: API Client (Pure Frontend version)
 const api = {
-    get workingProxyIndex() {
-    return parseInt(localStorage.getItem('ads_creator_proxy_idx')) || 0;
-    },
-    set workingProxyIndex(val) {
-        localStorage.setItem('ads_creator_proxy_idx', val);
-    },
-
-    /**
-     * Scrapes website content using a CORS proxy and browser-side parsing.
-     */
     async analyze(url) {
         console.log(`Analyzing website (Standalone): ${url}`);
 
@@ -27,9 +16,7 @@ const api = {
 
         let html = null;
         let lastError = null;
-
-        // Try proxies starting from the last successful one
-        const currentIdx = this.workingProxyIndex;
+        const currentIdx = 1;
         const searchOrder = [
             currentIdx,
             ...Array.from({ length: proxyTemplates.length }, (_, i) => i).filter(i => i !== currentIdx)
@@ -39,14 +26,11 @@ const api = {
             try {
                 const proxyUrl = proxyTemplates[idx](url);
                 console.log(`Trying Proxy #${idx}: ${proxyUrl.substring(0, 70)}...`);
-
                 const response = await fetch(proxyUrl);
                 if (!response.ok) throw new Error(`Status ${response.status}`);
-
                 const text = await response.text();
                 let candidateHtml = text;
 
-                // Handle JSON wrappers (like AllOrigins)
                 if (text.trim().startsWith('{')) {
                     try {
                         const data = JSON.parse(text);
@@ -56,7 +40,6 @@ const api = {
 
                 if (candidateHtml && candidateHtml.trim().length > 100) {
                     html = candidateHtml;
-                    this.workingProxyIndex = idx; // Persist success
                     console.log(`✅ Success with Proxy #${idx}`);
                     break;
                 }
@@ -66,113 +49,153 @@ const api = {
             }
         }
 
-        if (!html) {
-            throw new Error(`No se pudo acceder al sitio web. Error: ${lastError?.message || 'Bloqueo de seguridad'}`);
-        }
+        if (!html) throw new Error(`Error: ${lastError?.message || 'Bloqueo de seguridad'}`);
 
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // Extract metadata
-        const title = doc.title || '';
-        const description = doc.querySelector('meta[name="description"]')?.content || '';
-	console.log(`Obtiene MetaDatos del sitio`);
-
-
-
-        // Advanced image extraction
         const getAbs = (s) => {
             try { return new URL(s, url).href; } catch (e) { return null; }
         };
 
+        const getImageSize = (imgUrl) => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = async () => {
+                    try {
+                        await img.decode();
+                        resolve({ w: img.naturalWidth, h: img.naturalHeight });
+                    } catch (e) {
+                        resolve({ w: img.naturalWidth || 0, h: img.naturalHeight || 0 });
+                    }
+                };
+                img.onerror = () => resolve({ w: 0, h: 0 });
+                img.src = imgUrl;
+                setTimeout(() => resolve({ w: 0, h: 0 }), 3500);
+            });
+        };
+
+        // --- Extracción de Metadatos ---
+        const title = doc.title || '';
+        console.log(`MetaDatos Título: ${title}`);
+
+        // --- Extracción Avanzada de Imágenes ---
         const metaImage = doc.querySelector('meta[property="og:image"]')?.content ||
             doc.querySelector('meta[name="twitter:image"]')?.content ||
             doc.querySelector('link[rel="apple-touch-icon"]')?.href;
 
         const imgElements = Array.from(doc.querySelectorAll('img'));
-        const rawImages = imgElements.map(img =>
-            img.getAttribute('src') ||
-            img.getAttribute('data-src') ||
-            img.getAttribute('data-lazy-src') ||
-            img.getAttribute('srcset')?.split(',')[0].split(' ')[0]
-        ).filter(Boolean).map(getAbs).filter(Boolean);
+        const imagePromises = imgElements.map(async (img) => {
+            const srcAttr = img.getAttribute('src') ||
+                img.getAttribute('data-src') ||
+                img.getAttribute('data-lazy-src');
+            img.getAttribute('srcset')?.split(',')[0].split(' ')[0];
 
-        // Combine and prioritize
-        const allImages = metaImage ? [getAbs(metaImage), ...rawImages] : rawImages;
+            const absUrl = getAbs(srcAttr);
+            if (!absUrl) return null;
 
-        const detectedImages = [...new Set(allImages)]
-            .filter(src => {
+            const realSize = await getImageSize(absUrl);
+
+            return {
+                url: absUrl,
+                html: img.outerHTML.toLowerCase(),
+                Ancho: realSize.w,
+                Alto: realSize.h,
+                Width: parseInt(img.getAttribute('width') || 0),
+                Height: parseInt(img.getAttribute('height') || 0)
+            };
+        });
+
+        const results = (await Promise.all(imagePromises)).filter(item => item !== null);
+
+        // --- Filtrado Final ---
+        const detectedImages = results
+            .filter(item => {
+                const html = item.html;
+                const src = item.url;
                 const lower = src.toLowerCase();
-                // Relaxed filter: include logos unless they are definitely trackers/pixels
-                return src.startsWith('http') &&
-                    !lower.includes('pixel') &&
-                    !lower.includes('tracker') &&
-                    !lower.includes('analytics') &&
-                    !src.startsWith('data:');
+
+                if (lower.endsWith('.svg') || lower.endsWith('.ico') || lower.endsWith('.gif')) return false;
+                const badTerms = ['pixel', 'bono', 'boton', 'secure', 'certificado', 'logo', 'resena', 'tracker', 'facebook.com/tr', 'precio', 'hotmart', 'garantia', 'wp-smiley', 'testimonio'];
+                if (badTerms.some(term => lower.includes(term) || item.html.includes(term))) return false;
+                if (html.includes('class="wp-smiley"') || html.includes('attachment-thumbnail')) return false;
+                if (item.Width < 250 && item.Ancho < 250) return false;
+                if (item.Height < 150 && item.Alto < 150) return false;
+                if (item.Alto > 0) {
+                    const ratio = item.Ancho / item.Alto;
+                    if (ratio > 2.5) return false;
+                }
+
+                console.log(`Width: ${item.Width}px | Height: ${item.Height}px | Ancho: ${item.Ancho}px | Alto: ${item.Alto}px | URL: ${item.url}`);
+
+                return src.startsWith('http');
+
             })
+            .map(item => item.url)
             .slice(0, 15);
+            console.log(`Detected ${detectedImages.length} relevant images`);
 
-        console.log(`Detected ${detectedImages.length} relevant images`);
+//	const formattedImages = detectedImages.length > 0 
+//    	? detectedImages.map(url => `"${url}"`).join(', ') 
+//    	: "No se detectaron imágenes específicas.";
 
-        // Use Pollinations to analyze the extracted text
-        const systemPrompt = `Rol: Actúa como un analista experto en marketing digital, diseño estratégico y copywriting senior. Tu objetivo es realizar un web scraping y análisis profundo de la URL proporcionada para extraer insumos que permitan crear anuncios de alto impacto.
-Tarea: Analiza el sitio web ${url} y devuelve un objeto JSON detallado en español con la siguiente estructura y contenido:
-{
-"analisis_visual": {
-"paleta_colores": "Identifica colores principales y secundarios (HEX si es posible).",
-"tipografia": "Describe el estilo (moderna, clásica, peso) y su jerarquía visual.",
-"estilo_imagenes": "Define si son minimalistas, técnicas, realistas, estilo acuarela, etc.",
-"atmosfera_diseno": "Describe la sensación general (lujo, calma, urgencia, profesionalismo)."
-},
-"analisis_copywriting": {
-"titulares_principales": ["Lista de los encabezados más relevantes extraídos del sitio."],
-"propuesta_valor": "Define el beneficio central único que ofrece la marca.",
-"tono_voz": "Determina si es cercano, institucional, inspirador o técnico.",
-"metodo_beneficios": "Traduce 3 características técnicas en beneficios reales usando el método ¿Y qué?.",
-"formulas_detectadas": "Identifica si usan estructuras como PAS (Problema, Agitación, Solución) u otras como AIDA."
-},
-"estrategia_audiencia": {
-"buyer_persona_estimado": {
-"perfil": "Descripción semificticia del cliente ideal basada en el texto del sitio.",
-"puntos_dolor": ["Lista de problemas o frustraciones que el sitio busca resolver."],
-"metas_deseos": ["Qué aspira lograr el cliente con este producto/servicio."]
-},
-"etapa_embudo": "Identifica si el sitio está orientado a Conciencia (TOFU), Consideración (MOFU) o Conversión (BOFU)."
-},
-"insumos_para_anuncios": {
-"ganchos_sugeridos": ["Ideas de ganchos emocionales o racionales para anuncios de Meta Ads."],
-"angulos_de_venta": ["Propuestas de enfoques para el copy (ej. urgencia, exclusividad, ahorro de tiempo)."]
-}
-}
+// Use Pollinations to analyze the extracted text
+const systemPrompt = `Actúa como un analista experto en marketing digital, creador de contenido y copywriting senior. Tu objetivo es realizar un web scraping y análisis profundo de la URL proporcionada para extraer insumos y activos visuales que permitan crear anuncios de alto impacto.
+Analiza el sitio web ${url} y devuelve un objeto JSON detallado en español con la siguiente estructura y contenido:
+
+1. Identidad Visual:
+• Paleta de Colores: Identifica los colores principales, secundarios y de acento. Describe la psicología que transmiten (calma, urgencia, sofisticación, etc.).
+• Tipografía: Analiza el estilo de las fuentes (modernas, clásicas, ligeras, pesadas) y cómo jerarquizan la información.
+• Estilo de Imágenes: Determina el estilo de las imágenes y devuelve una o más de las siguientes opciones: minimalista, realista, ilustración 3d o Pixar.
+• Composición: Analiza la composición y si el contenido visual es el "freno del scroll".
+• Atmósfera General: Define si el diseño es editorial de alta gama, minimalista, saturado o funcional.
+
+2. Extracción y Análisis de Texto (Copywriting):
+• Contenido Textual: Extrae los titulares principales, descripción y llamados a la acción (CTA).
+• Propuesta de Valor: Identifica cuál es el beneficio principal que ofrecen (el "por qué" debería importarle al cliente) y no solo las características técnicas.
+• Tono de Voz: Determina si la comunicación es cercana, profesional, inspiradora o urgente.
+• Fórmulas de Persuasión: Detecta si utilizan estructuras como PAS (Problema, Agitación, Solución) o ganchos emocionales.
+
+3. Buyer Persona y Estrategia:
+• Cliente Ideal: Basado en el lenguaje y el diseño, describe el perfil del usuario al que intentan atraer (sus puntos de dolor, deseos y metas).
+• Etapa del Embudo: Identifica si el sitio está optimizado para la etapa de conciencia, consideración o conversión.
+
 Restricciones y Guías Adicionales:
-Precisión: No inventes datos; si una información no es detectable, indicá "no detectado".
-Claridad: El lenguaje debe ser profesional y directo, evitando redundancias.
-JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser procesado por mi aplicación sin errores de formato. Idioma: Toda la respuesta debe ser en español.`;
+1. Precisión: No inventes datos; si una información no es detectable, indica "no detectado".
+2. Claridad: El lenguaje debe ser profesional y directo, evitando redundancias.
+3. JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser procesado por mi aplicación sin errores de formato.
+4. Idioma: Toda la respuesta debe ser en español.
 
-const userPrompt = `URL: ${url}\nTitle: ${title}\nDesc: ${description}\n`;
+Objetivo final: Registra toda esta información en una tabla detallada para que luego puedas actuar como un estratega de contenido y generar prompts efectivos para crear imágenes y copies de anuncios que mantengan una coherencia total con esta marca.`;
 
-console.log(`Arma systemPrompt de análisis`);
-console.log(`Arma userPrompt con metadatos del sitio`);
+	const rawText = doc.body.innerText.replace(/\s+/g, ' ').replace(/(menu|close)\b/gi, '').trim();
+	const bodyContent = rawText.lastIndexOf('.', 2000) !== -1 ? rawText.substring(0, rawText.lastIndexOf('.', 2000) + 1) : rawText.substring(0, 2000);
+
+        const userPrompt = `Sitio: ${url}\n Título: ${title}\n Contenido: ${bodyContent}\n`;
+        console.log(`Arma systemPrompt de análisis: `, systemPrompt);
+        console.log(`Arma userPrompt de contenido: `, userPrompt);
 
         try {
             const rawResult = await this.callText(systemPrompt, userPrompt);
             const json = this.safeJsonParse(rawResult);
-	console.log(`Obtiene respuesta de Gemini`);
+            console.log(`Obtiene respuesta de Gemini. `, rawResult);
             if (!json) throw new Error("JSON Parse Error");
-            json.detected_images = detectedImages;
-	console.log(`Transforma respuesta a Json y retorna datos`);
+            json.contenido_web = bodyContent;
+            json.imagenes_detectadas = detectedImages;
+            console.log(`Convierte respuesta a Json y retorna datos. `, json);
             return json;
         } catch (e) {
             throw new Error(`Error en análisis de IA: ${e.message}`);
         }
-   },
+    },
 
     async callText(systemPrompt, userPrompt) {
-	console.log(`Obtiene textos de Prompts`);
+        console.log(`Obtiene textos de Prompts. `);
         try {
-        const combined = `${systemPrompt}\n${userPrompt}`.replace(/\s+/g, ' ').trim().substring(0, 2500);
+            const combined = `${systemPrompt}\n${userPrompt}`.replace(/\s+/g, ' ').trim().substring(0, 8000);
+	    console.log(`Combina los Prompts. `);	
             const encoded = encodeURIComponent(combined);
-	console.log(`Codifica los prompts a URI y envía fetch con Gemini`);
+            console.log(`Codifica los prompts a URI y envía fetch con Gemini. `);
             const url = `https://gen.pollinations.ai/text/${encoded}?model=gemini-fast&json=true`;
             const response = await fetch(url, {
                 headers: {
@@ -189,61 +212,74 @@ console.log(`Arma userPrompt con metadatos del sitio`);
         }
     },
 
-    
-       async generateCopy(websiteData, count = 3, exclude = []) {
+
+    async generateCopy(websiteData, count = 3, existingAds = []) {
         try {
             const hasRefImage = !!selectedImage;
-            const systemPrompt = `Crea ${count} conceptos de anuncios creativos y PERSUASIVOS para redes sociales.
-            RESPONDE SIEMPRE EN ESPAÑOL (excepto image_prompt que debe ser en inglés).
-            Usa marcos de marketing como AIDA o PAS para máxima conversión.
-            
-            Por cada anuncio entrega:
-            1. headline: Un gancho poderoso (MÁXIMO 4 PALABRAS).
-            2. caption: Copy de ventas persuasivo (2-3 frases directas al dolor del cliente).
-            3. visual_concept: Descripción corta del estilo visual.
-            4. image_prompt: Descripción EN INGLÉS para generar la imagen. Debe ser:
-               - Aspiracional, emocional, cinematográfica.
-               - Sin texto, sin letras, sin marcas de agua.
-               - Inspirada en el estilo visual de la marca: ${JSON.stringify(websiteData?.visual_style || '')} y la promesa: "${websiteData?.main_promise || ''}"
-               - Evitar fotos de stock genéricas. Prefiere: personas en acción de transformación, escenas de logro, luz simbólica, espacios minimalistas con energía.
-               - Formato 1:1, composición cinematográfica, iluminación premium.            
-            ${hasRefImage ?
-                    '- Para el PRIMER anuncio (index 0), sólo devuelve image_prompt vacío o placeholder, el sistema usará la imagen del sitio.' :
-                    '- Para TODOS los anuncios, crea image_prompts únicos y emocionalmente resonantes con la audiencia.'
+//	    const imagenUrl = `https://elmonstruocomemiedos.weebly.com/uploads/1/5/2/5/152513751/editor/mock-00001_6.png`;
+//	    const estiloDetectado = websiteData.identidad_visual?.estilo_imagenes;
+            const existingContext = existingAds.length > 0
+                ? `\nAnuncios ya generados (EVITA REPETIR ESTOS ÁNGULOS Y TITULARES):\n${existingAds.map(ad => `- ${ad.headline}`).join('\n')}`
+                : '';
+
+const systemPrompt = `Actua como un Director Creativo y Copywriter Senior experto en marketing de respuesta directa. Tu misión es transformar el análisis estratégico anterior (proporcionado en JSON) en ${count} variantes de anuncios de alto impacto diseñados para generar un freno del scroll inmediato.
+
+Genera un objeto JSON estricto en español con ${count} variantes de anuncios en un array llamado "ads".
+Cada anuncio dentro del array "ads" debe tener EXACTAMENTE esta estructura:
+{
+      "headline": "Título gancho (Hook) entre 4 y 6 palabras",
+      "caption": "Cuerpo del texto principal (3-5 frases directas apuntando a puntos de dolor)",
+      "visual_concept": "Breve descripción del concepto visual en español",
+      "image_prompt": "Prompt detallado para la generación de imagen. 
+
+REGLAS PARA EL PROMPT DE IMAGEN:
+
+      - Para la PRIMER variante (Image-to-Image), utiliza EXACTAMENTE este texto: 'Image-to-image transformation. Recreate the main elements of the reference image using a style that is strictly coherent with the brand's visual identity. Create a commercial scene with optimized soft lighting and maintain the original color palette. Use a balanced wide shot with abundant negative space for marketing text overlay. High-impact scroll stopper for a premium landing page.'
+      
+      - Para las VARIANTES RESTANTES (Text-to-Image), redacta prompts detallados en inglés que repliquen el estilo y transmitan los conceptos del producto y las emociones detectadas en el análisis."
+    }`;
+
+        const userPrompt = `Datos de Marca: ${JSON.stringify(websiteData).substring(0, 7000)}`;
+
+        console.log(`Arma systemPrompt de anuncios: `, systemPrompt);
+        console.log(`Arma userPrompt de contenido: `, userPrompt);
+	console.log(`Enviando solicitud para generar copys`);
+
+    	const rawResult = await this.callText(systemPrompt, userPrompt);
+    	let json = this.safeJsonParse(rawResult);
+
+            if (json) {
+                if (Array.isArray(json)) {
+                    json = { ads: json };
+                } else if (json.variants && !json.ads) {
+                    json.ads = json.variants;
+                } else if (!json.ads) {
+                    const possibleArray = Object.values(json).find(v => Array.isArray(v));
+                    if (possibleArray) json.ads = possibleArray;
+                    console.log(`Ads array`, possibleArray);
                 }
-            Evita conceptos ya usados: ${JSON.stringify(exclude)}.`;
+            }
 
-	console.log(`Arma systemPrompt para crear Ads`);
-
-            const userPrompt = `Datos de Marca: ${JSON.stringify(websiteData).substring(0, 1000)}. Tarea: Crea ${count} conceptos de anuncios NUEVOS en ESPAÑOL.`;
-	 console.log(`Crea prompt (userPrompt) con datos visuales Ads`);
-
-            const rawResult = await this.callText(systemPrompt, userPrompt);
-            let json = this.safeJsonParse(rawResult);
-	 console.log(`Arma Json con prompt para ads y datos visuales`);
-
-            if (json && Array.isArray(json)) json = { ads: json };
-	console.log(`Crea Copys y retorna Json con datos`);
-            return json;
-        } catch (e) {
-            throw new Error(`Fallo al generar copy publicitario: ${e.message}`);
+           console.log(`Copys y prompts generados correctamente con coherencia de marca`, json);
+           return json || { ads: [] };
+	} catch (e) {
+           throw new Error(`Fallo al generar copy publicitario: ${e.message}`);
         }
     },
 
     async generateImage(prompt, options = {}) {
         try {
-            const { width = 1080, height = 1080, model = 'flux', image = null, seed = null } = options;
-            const cleanPrompt = prompt.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 500);
+            const { width = 1024, height = 1024, model = null, image = null, seed = null} = options;
+            const cleanPrompt = prompt.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 800);
             const encodedPrompt = encodeURIComponent(cleanPrompt);
             const finalSeed = seed || Math.floor(Math.random() * 1000000);
-
             let url;
             let apiKey = POLLINATIONS_IMAGE_KEY;
 
             if (image && model === 'klein') {
                 apiKey = POLLINATIONS_KLEIN_KEY;
                 const encodedRef = encodeURIComponent(image);
-                url = `https://gen.pollinations.ai/image/${encodedPrompt}?model=klein&width=${width}&height=${height}&seed=${finalSeed}&nologo=true&image=${encodedRef}`;
+                url = `https://gen.pollinations.ai/image/${encodedPrompt}?model=klein&width=${width}&height=${height}&image=${encodedRef}`;
 
             } else {
                 url = `https://gen.pollinations.ai/image/${encodedPrompt}?width=${width}&height=${height}&seed=${finalSeed}&nologo=true&model=flux`;
@@ -266,12 +302,9 @@ console.log(`Arma userPrompt con metadatos del sitio`);
         }
     },
 
-    /**
-     * Helper to fetch an image and convert to DataURL to "clean" CORS for Canvas.
-     */
+    // Ayuda para obtener una imagen y convertirla a DataURL para CORS "limpio" para Canvas.
     async getImageAsDataUrl(url) {
         if (!url) return null;
-
         const proxies = [
             (u) => u, // Direct
             (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
@@ -362,9 +395,10 @@ console.log(`Arma userPrompt con metadatos del sitio`);
         let content = text;
         try {
             const outer = JSON.parse(text);
-            if (outer && outer.result) { content = outer.result;
-          }  else if (outer && typeof outer === 'object') return outer;
-        } catch (e) {  }
+            if (outer && outer.result) {
+                content = outer.result;
+            } else if (outer && typeof outer === 'object') return outer;
+        } catch (e) { }
 
         const clean = content.replace(/```json|```/g, '').trim();
         const match = clean.match(/[\[\{][\s\S]*[\]\}]/);
@@ -380,6 +414,7 @@ let stage = 'input';
 let websiteData = null;
 let detectedImages = [];
 let selectedImage = null;
+let selectedImageIndex = 0;
 let currentAds = [];
 
 // DOM Elements
@@ -518,7 +553,8 @@ if (urlForm) {
 
         try {
             websiteData = await api.analyze(url);
-            detectedImages = websiteData.detected_images || [];
+            detectedImages = websiteData.imagenes_detectadas || [];
+            selectedImageIndex = 0;
             selectedImage = detectedImages.length > 0 ? detectedImages[0] : null;
             updateProgress(1);
 
@@ -573,7 +609,7 @@ if (submitManualBtn) {
 
             const rawResult = await api.callText(systemPrompt, userPrompt);
             websiteData = api.safeJsonParse(rawResult);
-	console.log(`1er websiteData`, websiteData);
+            console.log(`Datos del sitio`, websiteData);
 
             if (!websiteData) throw new Error("No se pudo analizar el texto manual");
 
@@ -597,31 +633,24 @@ async function startGeneration() {
         const adCopy = await api.generateCopy(websiteData, 3);
         updateProgress(3);
 
-        currentAds = adCopy.ads.map(ad => ({
-            headline: ad.headline,
-            caption: ad.caption,
+        currentAds = (adCopy?.ads || []).map(ad => ({
+            headline: ad.headline || ad.titulo || "Título no generado",
+            caption: ad.caption || ad.texto || "Texto no generado",
             imageUrl: null,
-            visualConcept: ad.visual_concept,
-            imagePrompt: ad.image_prompt
+            imagePrompt: ad.image_prompt || ad.prompt || ""
         }));
-	console.log(`1er currentAds`);
 
         // Create a list of promises for image generation
         const generationPromises = currentAds.map(async (ad, i) => {
-            let options = { width: 1080, height: 1080, seed: Math.floor(Math.random() * 1000000) };
+            let options = { width: 1024, height: 1024, seed: Math.floor(Math.random() * 1000000) };
             let promptToUse = ad.imagePrompt;
-	console.log(`1er imagePrompt`, promptToUse);
-
             if (i === 0 && selectedImage) {
                 options.model = 'klein';
                 options.image = selectedImage;
-                promptToUse = `Abstract artistic background. Derive the color palette and mood from the reference image. Use the same dominant colors. Smooth gradients, elegant textures. NO OBJECTS. NO PEOPLE. NO TEXT. NO LOGOS. CLEAN BACKGROUND ONLY. 1:1 format.`;
-           console.log(`Prompt-Image klein`, promptToUse);
-                ad.visualConcept = 'Fondo premium + imagen del producto';
-                ad.productOverlay = selectedImage;
                 try {
                     const result = await api.generateImage(promptToUse, options);
                     ad.imageUrl = result.url;
+                    console.log(`Lee y ejecuta Prompt klein: `, promptToUse);
                 } catch (e) {
                     console.error('Error generating Klein background', e);
                     ad.imageUrl = selectedImage;
@@ -629,11 +658,11 @@ async function startGeneration() {
                 }
             } else {
                 options.model = 'flux';
-                promptToUse = `${ad.imagePrompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
-           console.log(`1er Prompt-Image flux`, promptToUse);
+                promptToUse = `${ad.imagePrompt}`;
                 try {
                     const result = await api.generateImage(promptToUse, options);
                     ad.imageUrl = result.url;
+                    console.log(`Lee y ejecuta Prompt flux: `, promptToUse);
                 } catch (e) {
                     ad.imageUrl = 'error';
                 }
@@ -659,48 +688,48 @@ async function startGeneration() {
 
 if (generateMoreBtn) {
     generateMoreBtn.addEventListener('click', async () => {
-        const currentCount = currentAds.length;
-        const existingHeadlines = currentAds.map(ad => ad.headline);
         setStage('generating');
-        updateProgress(2);
+        updateProgress(0);
+
+        if (detectedImages.length > 0) {
+            selectedImageIndex = (selectedImageIndex + 1) % detectedImages.length;
+            selectedImage = detectedImages[selectedImageIndex];
+            console.log(`Ciclado de imagen para variante Klein: Index ${selectedImageIndex}`, selectedImage);
+        }
 
         try {
-            const adCopy = await api.generateCopy(websiteData, 3, existingHeadlines);
+            updateProgress(2);
+            const adCopy = await api.generateCopy(websiteData, 3, currentAds);
             updateProgress(3);
 
-            const newAdsBase = adCopy.ads.map(ad => ({
-                headline: ad.headline,
-                caption: ad.caption,
+            const newAdsBase = (adCopy?.ads || []).map(ad => ({
+                headline: ad.headline || ad.titulo || "Título no generado",
+                caption: ad.caption || ad.texto || "Texto no generado",
                 imageUrl: null,
-                visualConcept: ad.visual_concept,
-                imagePrompt: ad.image_prompt
+                visualConcept: ad.visual_concept || ad.concepto || "",
+                imagePrompt: ad.image_prompt || ad.prompt || ""
             }));
 
             // Generate images for new ads
             const newGenerationPromises = newAdsBase.map(async (ad, i) => {
-                let options = { width: 1080, height: 1080, seed: Math.floor(Math.random() * 1000000) };
+                let options = { width: 1024, height: 1024, seed: Math.floor(Math.random() * 1000000) };
                 let promptToUse = ad.imagePrompt;
-           console.log(`Prompt-Image for news`, promptToUse);
-
-                if (i === 0 && selectedImage) { // For the first of the new batch too? Or just global?
+                if (i === 0 && selectedImage) {
                     options.model = 'klein';
                     options.image = selectedImage;
-                    promptToUse = `Abstract artistic background. Derive the color palette and mood from the reference image. Use the same dominant colors. Smooth gradients, elegant textures. NO OBJECTS. NO PEOPLE. NO TEXT. NO LOGOS. CLEAN BACKGROUND ONLY. 1:1 format.`;
-           console.log(`2do Prompt-Image klein`, promptToUse);
 
-                    ad.visualConcept = 'Fondo premium + imagen del producto';
-                    ad.productOverlay = selectedImage;
                     try {
                         const result = await api.generateImage(promptToUse, options);
                         ad.imageUrl = result.url;
+                        console.log(`Prompt variante klein: `, promptToUse);
                     } catch (e) {
                         ad.imageUrl = selectedImage;
                         ad.productOverlay = null;
                     }
                 } else {
                     options.model = 'flux';
-                    promptToUse = `${ad.imagePrompt}. NO TEXT. NO LETTERS. NO WATERMARKS. Clean commercial photography only.`;
-           console.log(`2do Prompt-Image flux`, promptToUse);
+                    promptToUse = `${ad.imagePrompt}`;
+                    console.log(`Promt variante flux: `, promptToUse);
                     try {
                         const result = await api.generateImage(promptToUse, options);
                         ad.imageUrl = result.url;
@@ -777,7 +806,7 @@ function renderAds() {
 
             const btn = e.currentTarget;
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span><span>Procesando...</span>';
+            btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span><span>		Procesando...</span>';
             btn.disabled = true;
 
             try {
@@ -803,4 +832,3 @@ function renderAds() {
         adsGallery.appendChild(clone);
     });
 }
-
