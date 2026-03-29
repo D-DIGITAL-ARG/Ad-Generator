@@ -4,10 +4,10 @@ const api = {
         console.log(`Analyzing website (Standalone): ${url}`);
 
         const proxyTemplates = [
-            (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-            (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}&cachebust=${Date.now()}`,
             (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-            (u) => `https://cors-proxy.htmldriven.com/?url=${encodeURIComponent(u)}`
+            (u) => `https://cors-proxy.htmldriven.com/?url=${encodeURIComponent(u)}`,
+            (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+            (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}&cachebust=${Date.now()}`
         ];
 
         let html = null;
@@ -130,32 +130,32 @@ const api = {
         console.log(`Detectadas ${detectedImages.length} imágenes relevantes`);
 
 
-const analisisPrompt = `Actúa como un analista experto en marketing digital, creador de contenido y copywriting senior. Tu objetivo es realizar un web scraping y análisis profundo de la url proporcionada por el usuario para extraer insumos y activos visuales que permitan crear anuncios de alto impacto. Devuelve un objeto JSON con el análisis detallado en español, el JSON debe tener estrictamente la siguiente estructura y contenido:
+const analisisPrompt = `Actúa como un analista experto en marketing digital, creador de contenido y copywriting senior. Tu objetivo es realizar un web scraping y análisis profundo de la url proporcionada por el usuario para extraer insumos y activos visuales que permitan crear anuncios de alto impacto. Devuelve un objeto JSON con el análisis detallado en español, el JSON debe tener exactamente la siguiente estructura y contenido:
 
-1. Identidad Visual:
-• Paleta de Colores: Identifica los colores principales, secundarios y de acento. Describe la psicología que transmiten (calma, urgencia, sofisticación, motivación).
+1. Identidad_Visual:
+• Paleta_de_Colores: Identifica los colores principales, secundarios y de acento. Describe la psicología que transmiten (calma, urgencia, sofisticación, motivación).
 • Tipografía: Analiza el estilo de las fuentes (modernas, clásicas, ligeras, pesadas, decorativas, elegantes).
-• Estilo de Imágenes: Identifica los estilos de las imágenes (acuarela, impresionismo, surrealismo, gótico, minimalismo, fotorrealismo, cyberpunk, ilustración infantil, renderizado 3D, caricatura, Pixar, Dreamworks).
+• Estilo_de_Imágenes: Identifica los estilos de las imágenes (acuarela, impresionismo, surrealismo, gótico, minimalismo, fotorrealismo, cyberpunk, ilustración infantil, renderizado 3D, caricatura, Pixar, Dreamworks).
 • Composición: Analiza la composición del contenido visual.
-• Atmósfera General: Analiza el diseño (editorial de alta gama, minimalista, saturado, funcional, alegre, divertido, educativo).
+• Atmósfera_General: Analiza el diseño (editorial de alta gama, minimalista, saturado, funcional, alegre, divertido, educativo).
 
-2. Extracción y Análisis de Texto (Copywriting):
-• Contenido Textual: Extrae los títulos principales y llamadas a la acción (CTA).
-• Propuesta de Valor: Define el beneficio central único que ofrece la marca.
+2. Extracción_y_Analisis_de_Texto:
+• Contenido_Textual: Extrae los títulos principales y llamadas a la acción (CTA).
+• Propuesta_de_Valor: Define el beneficio central único que ofrece la marca.
 • Beneficios: Traduce 3 características técnicas en beneficios reales usando el método ¿Y qué?.
-• Tono de Voz: Determina si la comunicación es cercana, profesional, inspiradora o urgente.
-• Fórmulas de Persuasión: Detecta si utilizan estructuras como PAS (Problema, Agitación, Solución) u otras como AIDA.
+• Tono_de_Voz: Determina si la comunicación es cercana, profesional, inspiradora o urgente.
+• Fórmulas_de_Persuasión: Detecta si utilizan estructuras como PAS (Problema, Agitación, Solución) u otras como AIDA.
 
-3. Buyer Persona y Estrategia:
-• Cliente Ideal: Descripción semificticia del cliente ideal basada en el texto del sitio.
-• Puntos de dolor: Lista de problemas o frustraciones que el sitio busca resolver.
-• Metas y deseos: Qué aspira lograr el cliente con este producto/servicio.
-• Etapa del Embudo: Identifica si el sitio está optimizado para la etapa de conciencia, consideración o conversión.
+3. Buyer_Persona_y_Estrategia:
+• Cliente_Ideal: Descripción semificticia del cliente ideal basada en el texto del sitio.
+• Puntos_de_dolor: Lista de problemas o frustraciones que el sitio busca resolver.
+• Metas_y_deseos: Qué aspira lograr el cliente con este producto/servicio.
+• Etapa_del_Embudo: Identifica si el sitio está optimizado para la etapa de conciencia, consideración o conversión.
 
 Restricciones y Guías Adicionales:
 1. Precisión: No inventes datos; si una información no es detectable, indica 'no detectado'.
 2. Claridad: El lenguaje debe ser profesional y directo, evitando redundancias.
-3. IMPORTANTE SOBRE IMÁGENES: Para la sección 'Identidad Visual' y 'Estilo de Imágenes', limítate exclusivamente a analizar las URLs proporcionadas en la lista 'Imágenes Detectadas'. Ignora cualquier otra referencia visual del sitio que no esté en esa lista para evitar inconsistencias.
+3. IMPORTANTE SOBRE IMÁGENES: Para la sección 'Identidad_Visual' y 'Estilo_de_Imágenes', limítate exclusivamente a analizar las URLs proporcionadas en la lista 'Imágenes Detectadas'. Ignora cualquier otra referencia visual del sitio que no esté en esa lista para evitar inconsistencias.
 4. Idioma: Toda la respuesta debe ser en español.
 5. JSON Estricto: Asegurate de que la salida sea un JSON válido para que pueda ser procesado por mi aplicación sin errores de formato.
 6. Responde ÚNICAMENTE con el objeto JSON, sin introducciones ni comentarios adicionales.
@@ -182,9 +182,7 @@ const imagenesParaAnalizar = detectedImages.map((url, index) => `Imagen ${index 
 const systemPrompt = `${analisisPrompt}`.trim().substring(0, 4500);
 const userPrompt = `URL del sitio: ${url}
 Imágenes Detectadas:
-${imagenesParaAnalizar}
-
-Contenido web: ${bodyContent}`.trim().substring(0, 3000);
+${imagenesParaAnalizar}`.trim().substring(0, 3000);
 
         console.log(`Arma Prompts de Análisis: `, systemPrompt, userPrompt);
         console.log(`Envia solicitud para generar Analisis`);
@@ -194,8 +192,8 @@ Contenido web: ${bodyContent}`.trim().substring(0, 3000);
             const cleanResult = rawResult.replace(/```json|```/g, '').trim();
             const json = this.safeJsonParse(cleanResult);
             if (!json) throw new Error("JSON Parse Error");
-            json.contenido_web = bodyContent;
-            json.imagenes_detectadas = detectedImages;
+            json.Contenido_Web = bodyContent;
+            json.Imagenes_Detectadas = detectedImages;
             console.log(`Convierte respuesta a Json y retorna datos. `, json);
             return json;
         } catch (e) {
@@ -207,29 +205,28 @@ async callText(systemPrompt, userPrompt) {
     console.log(`Obtiene textos de Prompts`);
     
     try {        
-        const GROQ_API_KEY = '';
-        const url = "https://api.groq.com/openai/v1/chat/completions";
-        console.log("Fetch de analisis a Groq: ");
+        const url = 'https://api.groq.com/openai/v1/chat/completions';
+        console.log('Fetch de analisis a Groq: ');
 
         const response = await fetch(url, {
-            method: "POST",
+            method: 'POST',
             headers: {
-                "Authorization": `Bearer ${GROQ_API_KEY}`,
-		"Content-Type": "application/json"
+                'Authorization': `Bearer ${CONFIG.GROQ_API_KEY}`,
+		'Content-Type': 'application/json'
 	            },
             body: JSON.stringify({
-                model: "meta-llama/llama-4-scout-17b-16e-instruct",
+                model: 'meta-llama/llama-4-scout-17b-16e-instruct',
                 messages: [
                {
-		role: "system", 
+		role: 'system', 
 		content: systemPrompt
 		},
 		{
-      		role: "user",
+      		role: 'user',
       		content: userPrompt
     		}
 		],
-                temperature: 0.3,
+                temperature: 0.7,
                 max_tokens: 2048,
                 top_p: 1,
                 stream: false,
@@ -252,14 +249,13 @@ async callAds(systemPrompt, userPrompt, userImg) {
     console.log(`Obtiene datos de Prompts`);
     
 try {        
-     const GROQ_API_KEY = '';
      const url = 'https://api.groq.com/openai/v1/chat/completions';
      console.log('Fetch de ads a Groq: ');
 
 const response = await fetch(url, {
     method: 'POST', 
     headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`, 
+        'Authorization': `Bearer ${CONFIG.GROQ_API_KEY}`, 
         'Content-Type': 'application/json' 
     },
     body: JSON.stringify({
@@ -284,7 +280,7 @@ const response = await fetch(url, {
 
         if (!response.ok) throw new Error(`Error de API ${response.status}`);
 	const data = await response.json();
-	console.log("Respuesta de Ads de Groq: ", data);
+	console.log('Respuesta de Ads de Groq: ', data);
         return data.choices[0].message.content;
 
     } catch (e) {
@@ -294,7 +290,7 @@ const response = await fetch(url, {
 
 async generateCopy(websiteData, existingAds = []) {
     try {
-const adsPrompt = `Actua como un Director Creativo y Copywriter Senior experto en marketing de respuesta directa. Tu misión es analizar la información proporcionada en el 'Análisis Previo' y crear 2 variantes de anuncios de alto impacto diseñados para generar un freno del scroll inmediato.
+const adsPrompt = `Actua como un Director Creativo y Copywriter Senior experto en marketing de respuesta directa. Tu misión es analizar la información proporcionada en el 'Análisis Previo' y 'Contenido web' y crear 2 variantes de anuncios de alto impacto diseñados para generar un freno del scroll inmediato.
 
 Genera un objeto JSON estricto en español con 2 variantes de anuncios en un array llamado "ads".
 Responde ÚNICAMENTE con el objeto JSON, sin introducciones ni comentarios adicionales.
@@ -302,24 +298,36 @@ Cada anuncio dentro del array "ads" debe tener EXACTAMENTE esta estructura:
 {
       "headline": "Título gancho (Hook) entre 4 y 6 palabras",
       "caption": "Cuerpo del texto principal (3-5 frases directas apuntando a puntos de dolor)",
-      "visual_concept": "Breve descripción del concepto visual en español",
       "image_prompt": "Prompt para la generación de imagen, que cumpla estrictamente con las siguientes reglas: 
 
-1. Deben estar escritos SIEMPRE EN INGLÉS.
+1. Deben estar escritos siempre en inglés.
 
-2. Para la primer variante crea un prompt para una IA que genera image-to-image, el objetivo es que se identifiquen personajes, objetos o productos exactos presentes en la imagen y se INCORPOREN EN UNA NUEVA ESCENA, DIFERENTE Y CREATIVA. [AÑADE AQUÍ LA DESCRIPCIÓN DE LA NUEVA ESCENA]. Plano general equilibrado, amplio espacio negativo.
+2. Para la primer variante actúa como un analista experto en diseño visual y especialista en ingeniería de prompts. Tu tarea es realizar un análisis exhaustivo de la imagen adjunta para redactar un prompt altamente preciso para crear una imagen a partir de una imagen.
 
-3. Para la segunda variante crea un prompt para una IA que genera text-to-image, el objetivo es que se identifiquen productos o servicios exactos presentes en el 'Análisis Previo' proporcionado y generar una imagen publicitaria relacionada con el producto o servicio identificado. Sé creativo, no te limites solo a crear una imagen similar a las del sitio.
+Sigue estos pasos:
 
-4. Mantener coherencia con la paleta de colores y el estilo visual detectado mencionado en el 'Análisis Previo'"
-}`;
+Análisis de Estilo Visual: Identifica la paleta de colores dominante, la iluminación (ej. luz natural, cinemática, neón), la composición, el medio artístico (ej. fotografía hiperrealista, ilustración digital, acuarela) y la atmósfera general (ej. minimalista, sofisticada, caótica).
+
+Identificación de Elementos: Describe con detalle el sujeto principal, los objetos secundarios, el fondo y cualquier detalle textural clave presente en la imagen.
+
+Generación del Prompt Final: Redacta un prompt, de al menos 500 caracteres, para generar una imagen aplicando el Estilo Visual, la nueva imagen incorpora los elementos identificados en una nueva escena, diferente y creativa. Incluye palabras clave técnicas que refuercen la calidad visual.
+ 
+3. Para la segunda variante actúa como un analista experto y especialista en ingeniería de prompts. Tu tarea es analizar detalladamente la información proporcionada en el Análisis Previo, Contenido web y Estilo Visual para redactar un prompt altamente preciso para crear una imagen a partir de texto.
+
+Generación del Prompt Final: Redacta un prompt, de al menos 500 caracteres, combinando la información obtenida del Análisis Previo, Contenido web y Estilo Visual para crear una imagen publicitaria. Asegúrate de incluir palabras clave técnicas que refuercen la calidad visual."}`;
 
 const existingContext = existingAds.length > 0 
 ? `\nNo repitas esto: ${existingAds.map(ad => ad.headline).join(', ')}` : '';
 
-
-const systemPrompt = `${adsPrompt}`.trim().substring(0, 2500);
-const userPrompt = `Análisis Previo: ${JSON.stringify(websiteData)}`.trim().substring(0, 6000);
+const systemPrompt = `${adsPrompt}
+`.trim().substring(0, 3500);
+const userPrompt = `
+Análisis Previo:
+${JSON.stringify(websiteData.Extracción_y_Analisis_de_Texto)}
+Contenido web:
+${websiteData.Contenido_Web}
+Estilo Visual:
+${JSON.stringify(websiteData.Identidad_Visual)}`.trim().substring(0, 6000);
 const userImg = selectedImage;
 
 	console.log(`Arma Prompts para Ads: `, userImg, systemPrompt, userPrompt);
@@ -349,38 +357,33 @@ const userImg = selectedImage;
 },
 
 async generateImage(prompt, imagenOk) {
-	const API_FLOW_KEY = '';
-	const url = 'https://api.siliconflow.com/v1/images/generations';
-
-	const headers = {
-        	'Authorization': `Bearer ${API_FLOW_KEY}`,
-        	'Content-Type': 'application/json'
-    	};
+    console.log("Imagen de referencia:", imagenOk);
+    const url = 'https://api.siliconflow.com/v1/images/generations';
 
 	let bodyData = {
         	prompt: prompt,
         	image_size: '1024x1024',
         	batch_size: 1,
         	prompt_enhancement: false
-    	};
+		};
 
 	if (imagenOk) {
-		console.log(imagenOk);
         	bodyData.model = 'black-forest-labs/FLUX.1-Kontext-dev';
-        	bodyData.image = imagenOk; 
-        	bodyData.strength = 0.2; 
+        	bodyData.image = imagenOk;
+		bodyData.strength = 0.1;
         } else {
         	bodyData.model = 'black-forest-labs/FLUX.1-schnell';
         	bodyData.num_inference_steps = 4;
-        }
+	}
 
-try {
-        console.log(`Solicitando imagen Flow (${bodyData.model}) con prompt:`, prompt);
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(bodyData)
+    try {
+	console.log(`Solicitando edición a FLOW (${bodyData.model}) con prompt:`, prompt);
+	const response = await fetch(url, {
+            	method: 'POST',
+		headers: {
+        	'Authorization': `Bearer ${CONFIG.FLOW_API_KEY}`,
+        	'Content-Type': 'application/json'	},
+	        body: JSON.stringify(bodyData)
         });
 
         if (!response.ok) {
@@ -389,7 +392,7 @@ try {
         }
 
         const data = await response.json();
-        const generatedImageUrl = data.images?.[0]?.url || data.data?.[0]?.url;
+	const generatedImageUrl = data.images?.[0]?.url || data.data?.[0]?.url || data.images?.[0];
 
         if (!generatedImageUrl) throw new Error("No se encontró la URL de la imagen");
 
@@ -695,7 +698,7 @@ if (urlForm) {
 
         try {
             websiteData = await api.analyze(url);
-            detectedImages = websiteData.imagenes_detectadas || [];
+            detectedImages = websiteData.Imagenes_Detectadas || [];
             selectedImageIndex = 0;
             selectedImage = detectedImages.length > 0 ? detectedImages[0] : null;
             updateProgress(1);
@@ -741,14 +744,14 @@ async function startGeneration() {
         try {
 		if (i < 1 && imagenRef) {
                     const result = await api.generateImage(promptToUse, imagenRef);
-                    ad.imageUrl = result.url;
+		    ad.imageUrl = (result && result.url) ? result.url : (selectedImage || 'error');
 		} else {
                     const result = await api.generateImage(promptToUse);
-                    ad.imageUrl = result.url;
+                    ad.imageUrl = (result && result.url) ? result.url : (selectedImage || 'error');
                 }
          } catch (e) {
                     console.error(`Error en generación de imagen ${i}:`, e);
-                    ad.imageUrl = imagenRef;
+                    ad.imageUrl = selectedImage;
                     ad.productOverlay = null;
                 }
             });
@@ -756,8 +759,8 @@ async function startGeneration() {
         await Promise.all(generationPromises);
         updateProgress(4);
         await new Promise(r => setTimeout(r, 800));
-        renderAds();
         setStage('results');
+        renderAds();
 
    	} catch (error) {
         	console.error("Error en startGeneration:", error);
@@ -816,8 +819,8 @@ if (generateMoreBtn) {
             currentAds = [...currentAds, ...newAdsBase];
             updateProgress(4);
             await new Promise(r => setTimeout(r, 800));
-            renderAds();
             setStage('results');
+            renderAds();
 
         } catch (error) {
         	console.error("Error en startGeneration:", error);
