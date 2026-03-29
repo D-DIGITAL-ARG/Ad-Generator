@@ -16,7 +16,8 @@ jobs:
       - name: 2. Crear archivo config.js desde Secretos
         run: |
           echo "${{ secrets.CONFIG_JS_CONTENT }}" > config.js
-        # Esto crea el archivo físicamente en el servidor temporal de GitHub
+          git add config.js
+        # Esto crea el archivo físicamente en el servidor temporal de GitHub 
 
       - name: 3. Publicar en GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
